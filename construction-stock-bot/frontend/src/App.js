@@ -182,7 +182,7 @@ function App() {
   const fetchStockData = async (ticker) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/stock-analysis`, {
+      const response = await fetch(`https://bulidix-2.onrender.com/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
