@@ -170,7 +170,8 @@ function App() {
   const [stockData, setStockData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [animationStep, setAnimationStep] = useState(0);
-  const [showStockSelector, setShowStockSelector] = useState(false); // Track visibility of stock selector
+  const [showStockSelector, setShowStockSelector] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const animationInterval = setInterval(() => {
@@ -179,58 +180,55 @@ function App() {
     return () => clearInterval(animationInterval);
   }, []);
 
-  const [error, setError] = useState(null);
+  const fetchStockData = async (ticker) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/stock-analysis`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ticker }),
+      });
 
-const fetchStockData = async (ticker) => {
-  setIsLoading(true);
-  setError(null);
-  try {
-    const response = await fetch(`${process.env.REACT_APP_API_URL}/api/stock-analysis`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ ticker }),
-    });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch: ${response.statusText}`);
+      }
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch: ${response.statusText}`);
+      const data = await response.json();
+
+      if (data.error) {
+        setError(data.error);
+      } else {
+        setStockData(data);
+      }
+    } catch (error) {
+      setError(error.message);
+      console.error('Error fetching stock data:', error);
     }
+    setIsLoading(false);
+  };
 
-    const data = await response.json();
-
-    if (data.error) {
-      setError(data.error);
-    } else {
-      setStockData(data);
-    }
-  } catch (error) {
-    setError(error.message);
-    console.error('Error fetching stock data:', error);
-  }
-  setIsLoading(false);
-};
   const handleStockSelect = (stock) => {
     setSelectedStock(stock);
     fetchStockData(stock.ticker);
   };
 
   const handleNextClick = () => {
-    setShowStockSelector(true); // Show the stock selection after "Next" click
+    setShowStockSelector(true);
   };
 
   const formatResponse = (responseText) => {
-    // Remove the double stars (**) and split the response into sections
     const formattedText = responseText
       .replace(/\*\*/g, '')
       .split('\n')
-      .filter((line) => line.trim() !== '') // Remove empty lines
+      .filter((line) => line.trim() !== '')
       .map((line, index) => {
-        // If the line contains a colon, treat it as a heading
         if (line.includes(':')) {
-          return <h4 key={index}>{line}</h4>; // Heading style
+          return <h4 key={index}>{line}</h4>;
         }
-        return <li key={index}>{line}</li>; // Bullet point for content
+        return <li key={index}>{line}</li>;
       });
   
     return <div>{formattedText}</div>;
@@ -248,7 +246,6 @@ const fetchStockData = async (ticker) => {
         </div>
       ) : (
         <div>
-          {/* Description and Next Button */}
           {!showStockSelector && (
             <div className="description-container">
               <div className="description-text">
@@ -258,7 +255,7 @@ const fetchStockData = async (ticker) => {
                 className="next-button"
                 onClick={handleNextClick}
               >
-                &rarr; {/* Right arrow symbol */}
+                &rarr;
               </div>
             </div>
           )}
@@ -286,8 +283,9 @@ const fetchStockData = async (ticker) => {
           </div>
 
           {isLoading && <div className="loading">Loading...</div>}
+          {error && <div className="error-message">{error}</div>}
 
-          {selectedStock && stockData && (
+          {selectedStock && stockData && !error && (
             <div className="stock-details">
               <h2>
                 {selectedStock.name} ({selectedStock.ticker})
