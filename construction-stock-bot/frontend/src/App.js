@@ -179,34 +179,37 @@ function App() {
     return () => clearInterval(animationInterval);
   }, []);
 
-  const fetchStockData = async (ticker) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`https://bulidix-2.onrender.com/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ticker }),
-      });
+  const [error, setError] = useState(null);
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch: ${response.statusText}`);
-      }
+const fetchStockData = async (ticker) => {
+  setIsLoading(true);
+  setError(null);
+  try {
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/api/stock-analysis`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ticker }),
+    });
 
-      const data = await response.json();
-
-      if (data.error) {
-        console.error('Error in backend:', data.error);
-      } else {
-        setStockData(data);
-      }
-    } catch (error) {
-      console.error('Error fetching stock data:', error);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch: ${response.statusText}`);
     }
-    setIsLoading(false);
-  };
 
+    const data = await response.json();
+
+    if (data.error) {
+      setError(data.error);
+    } else {
+      setStockData(data);
+    }
+  } catch (error) {
+    setError(error.message);
+    console.error('Error fetching stock data:', error);
+  }
+  setIsLoading(false);
+};
   const handleStockSelect = (stock) => {
     setSelectedStock(stock);
     fetchStockData(stock.ticker);
