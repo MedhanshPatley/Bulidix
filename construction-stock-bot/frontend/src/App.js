@@ -182,7 +182,7 @@ function App() {
   const fetchStockData = async (ticker) => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/stock-analysis', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/stock-analysis`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
