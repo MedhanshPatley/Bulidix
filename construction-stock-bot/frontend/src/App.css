@@ -1,0 +1,145 @@
+
+/* Import Source Code Pro from Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@300;400;600&display=swap');
+
+.app {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh; /* Ensure the height is 100% of the viewport */
+  background-color: rgb(0, 0, 0);
+  color:rgba(255, 255, 255, 0.674);
+  font-family: 'Source Code Pro';
+  flex-direction: column; /* Ensure content is stacked vertically */
+}
+
+.animation-container {
+  text-align: center;
+  margin-bottom: 20px; /* Add space between animation and other content */
+ 
+}
+
+.animation-container h2 {
+  margin: 0;
+  font-size: 4rem; /* Increased font size */
+  animation-duration: 1s;
+
+}
+
+.fade-in {
+  animation: fadeIn 1s ease-in-out;
+}
+
+.flip {
+  animation: flip 1s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes flip {
+  from {
+    transform: rotateX(90deg);
+    opacity: 0;
+  }
+  to {
+    transform: rotateX(0);
+    opacity: 1;
+  }
+}
+
+.stock-selector {
+  margin-bottom: 20px; /* Adds space between the dropdown and loading text */
+  text-align: center;
+ 
+}
+
+select {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  background-color: #000000;
+  color:rgba(255, 255, 255, 0.696);
+  font-family: 'Source Code Pro', monospace;
+}
+
+.loading {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.674);
+  font-size: 16px;
+  margin-top: 20px; /* Adds space between the dropdown and "Loading..." text */
+}
+
+.stock-details {
+  background-color: #000000;
+  color:rgba(241, 241, 241, 0.763);
+  padding: 20px;
+  border-radius: 5px;
+  width: 1000px; /* Set a fixed width to make the window smaller */
+  max-height: 500px; /* Limit the height */
+  overflow-y: auto; 
+  /* Allow scrolling if content overflows */
+  margin: 0 auto; /* Center the details */
+}
+
+.stock-info p {
+  margin: 10px 0;
+}
+
+::-webkit-scrollbar {
+  width: 2px; /* Adjust width for vertical scrollbar */
+  height: 2px; /* Adjust height for horizontal scrollbar */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888; /* Color of the scrollbar thumb */
+  border-radius: 10px; /* Rounded corners for a smoother look */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555; /* Darker on hover */
+}
+
+::-webkit-scrollbar-track {
+  background: #101010; /* Color of the scrollbar track */
+  border-radius: 10px; /* Match track corners to thumb */
+}
+
+.description-container {
+  position: absolute;
+  top: 50%; /* Center vertically */
+  left: 50%; /* Center horizontally */
+  transform: translate(-50%, -50%); /* Center the element perfectly */
+  text-align: center;
+  font-size: 1.5rem;
+}
+
+.description-text {
+  margin-bottom: 20px;
+}
+
+.next-button {
+  font-size: 2rem;
+  cursor: pointer;
+  animation: bounce 1s infinite;
+}
+
+@keyframes bounce {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+
