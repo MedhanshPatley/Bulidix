@@ -8,7 +8,7 @@
   align-items: center;
   height: 100vh; /* Ensure the height is 100% of the viewport */
   background-color: rgb(0, 0, 0);
-  color:rgba(255, 255, 255, 0.674);
+  color:rgb(255, 255, 255);
   font-family: 'Source Code Pro';
   flex-direction: column; /* Ensure content is stacked vertically */
 }
@@ -65,20 +65,20 @@ select {
   padding: 10px;
   font-size: 16px;
   background-color: #000000;
-  color:rgba(255, 255, 255, 0.696);
+  color:rgb(255, 255, 255);
   font-family: 'Source Code Pro', monospace;
 }
 
 .loading {
   text-align: center;
-  color: rgba(255, 255, 255, 0.674);
+  color: rgb(255, 255, 255);
   font-size: 16px;
   margin-top: 20px; /* Adds space between the dropdown and "Loading..." text */
 }
 
 .stock-details {
   background-color: #000000;
-  color:rgba(241, 241, 241, 0.763);
+  color:rgb(241, 241, 241);
   padding: 20px;
   border-radius: 5px;
   width: 1000px; /* Set a fixed width to make the window smaller */
@@ -150,4 +150,21 @@ select {
   border: 1px solid #dc2626;
   border-radius: 0.25rem;
   background-color: #fee2e2;
+}
+
+.content-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+}
+
+.logo-container {
+  width: 300px;
+  margin-bottom: 20rem;
+}
+
+.logo {
+  width: 100%;
+  height: auto;
 }

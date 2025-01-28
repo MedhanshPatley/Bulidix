@@ -150,6 +150,7 @@
 
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import logoWhite from './logo-white.png';
 
 const constructionStocks = [
   { ticker: 'IBP', name: 'Installed Building Products, Inc.' },
@@ -162,7 +163,13 @@ const constructionStocks = [
   { ticker: 'LEN', name: 'Lennar Corporation' },
   { ticker: 'PHM', name: 'PulteGroup, Inc.' },
   { ticker: 'NVR', name: 'NVR, Inc.' },
+<<<<<<< HEAD
+  { ticker: 'BN', name: 'Brookfield Corp' },
+  { ticker: 'NVDA', name: 'NVIDIA Corporation' }
+=======
+  { ticker: 'NVDA', name: 'NVIDIA Corp.' },
   { ticker: 'BN', name: 'Brookfield Corp' }
+>>>>>>> 09bd547e7490b112dfa9e075d48747b9ff532bab
 ];
 
 function App() {
@@ -184,7 +191,7 @@ function App() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/stock-analysis`, {
+      const response = await fetch('${process.env.REACT_APP_API_URL}/api/stock-analysis', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -247,15 +254,24 @@ function App() {
       ) : (
         <div>
           {!showStockSelector && (
-            <div className="description-container">
-              <div className="description-text">
-                <p>Analyze construction stocks with AI-powered insights.</p>
+            <div className="content-container">
+              <div className="logo-container">
+                <img 
+                  src={logoWhite}
+                  alt="Briqko Logo" 
+                  className="logo"
+                />
               </div>
-              <div
-                className="next-button"
-                onClick={handleNextClick}
-              >
-                &rarr;
+              <div className="description-container">
+                <div className="description-text">
+                  <p>Analyze stocks with AI-powered insights.</p>
+                </div>
+                <div
+                  className="next-button"
+                  onClick={handleNextClick}
+                >
+                  &rarr;
+                </div>
               </div>
             </div>
           )}
