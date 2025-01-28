@@ -10,7 +10,14 @@ import pandas as pd
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
+
 
 @app.route('/')
 def home():
@@ -176,4 +183,5 @@ Keep the analysis concise but comprehensive, focusing on key insights from the h
         return {'error': str(e)}
 
 if __name__ == '__main__':
-   app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
