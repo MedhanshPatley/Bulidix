@@ -37,6 +37,42 @@ def stock_analysis():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+@app.route('/api/search-stocks', methods=['GET'])
+def search_stocks():
+    query = request.args.get('query', '').strip()
+    if not query:
+        return jsonify([])
+    
+    try:
+        # Using yfinance to search for stocks
+        stock = yf.Ticker(query)
+        matches = []
+        
+        # Get suggestions from common stock search patterns
+        possible_tickers = [
+            query.upper(),  # Exact match
+            f"{query.upper()}.X",  # International stocks
+            f"{query.upper()}-USD"  # Crypto
+        ]
+        
+        for ticker_try in possible_tickers:
+            try:
+                stock = yf.Ticker(ticker_try)
+                info = stock.info
+                if info and 'longName' in info:
+                    matches.append({
+                        'ticker': ticker_try.split('.')[0],  # Remove any suffix
+                        'name': info.get('longName', ''),
+                        'exchange': info.get('exchange', '')
+                    })
+            except:
+                continue
+                
+        return jsonify(matches)
+    except Exception as e:
+        print(f"Error searching stocks: {e}")
+        return jsonify([])
+
 
 def calculate_period_performance(data, period):
     if data.empty:
