@@ -236,6 +236,7 @@ from time import sleep
 from functools import lru_cache
 import logging
 from cachetools import TTLCache
+import yahooquery as yq
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -252,19 +253,6 @@ CORS(app, resources={
     }
 })
 
-# Cache configurations
-search_cache = TTLCache(maxsize=100, ttl=3600)  # Cache search results for 1 hour
-stock_info_cache = TTLCache(maxsize=100, ttl=3600)  # Cache stock info for 1 hour
-
-def clean_company_name(name):
-    """Clean company name by removing common suffixes and special characters"""
-    common_suffixes = [' inc', ' inc.', ' corp', ' corp.', ' ltd', ' ltd.', 
-                      ' plc', ' co', ' co.', ' company', ' holdings', 
-                      ' holding', ' group', ' technologies', ' technology']
-    name = name.lower()
-    for suffix in common_suffixes:
-        name = name.replace(suffix, '')
-    return ' '.join(name.split())  # Remove extra whitespace
 
 @lru_cache(maxsize=100)
 def get_stock_info(ticker_try):
@@ -330,101 +318,56 @@ def calculate_rsi(data, periods=14):
 def home():
     return "Welcome to the Stock Analysis API! Use the endpoint '/api/stock-analysis' to fetch insights."
 
+search_cache = {}
+
+
+def get_ticker_from_name(company_name):
+    """Fetch ticker symbol for a given company name using yahooquery."""
+    try:
+        search = yq.search(company_name)
+        if 'quotes' in search and search['quotes']:
+            return search['quotes'][0]['symbol']  # Return first result's ticker
+    except Exception as e:
+        logger.error(f"Error fetching ticker for {company_name}: {e}")
+    return None
+
+
 @app.route('/api/search-stocks', methods=['GET'])
 def search_stocks():
+    """Search for stock details by ticker symbol or company name."""
     query = request.args.get('query', '').strip()
     if not query:
-        return jsonify([])
-    
-    # Check cache first
+        return jsonify({'error': 'Query parameter is required'}), 400
+
     cache_key = query.lower()
     if cache_key in search_cache:
         return jsonify(search_cache[cache_key])
-    
-    try:
-        matches = []
-        cleaned_query = clean_company_name(query)
-        
-        # Try yfinance search first (this uses Yahoo Finance's search API)
-        try:
-            # Use yfinance's search functionality
-            stock = yf.Ticker(query)
-            if hasattr(stock, 'info') and stock.info:
-                # Get list of similar tickers from Yahoo Finance
-                similar = stock.info.get('similarStocks', [])
-                # Add the main stock first
-                if 'symbol' in stock.info:
-                    matches.append({
-                        'ticker': stock.info['symbol'],
-                        'name': stock.info.get('longName', ''),
-                        'exchange': stock.info.get('exchange', ''),
-                        'match_quality': 'high'
-                    })
-                
-                # Add similar stocks
-                for similar_ticker in similar[:4]:  # Limit to 4 similar stocks
-                    try:
-                        similar_stock = yf.Ticker(similar_ticker)
-                        if similar_stock.info and 'longName' in similar_stock.info:
-                            matches.append({
-                                'ticker': similar_ticker,
-                                'name': similar_stock.info['longName'],
-                                'exchange': similar_stock.info.get('exchange', ''),
-                                'match_quality': 'related'
-                            })
-                    except:
-                        continue
-        except Exception as e:
-            logger.debug(f"Primary search failed: {e}")
-            
-            # Fallback: Try direct symbol search
-            try:
-                fallback_stock = yf.Ticker(query.upper())
-                if fallback_stock.info and 'longName' in fallback_stock.info:
-                    matches.append({
-                        'ticker': query.upper(),
-                        'name': fallback_stock.info['longName'],
-                        'exchange': fallback_stock.info.get('exchange', ''),
-                        'match_quality': 'direct'
-                    })
-            except:
-                pass
 
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_matches = []
-        for match in matches:
-            if match['ticker'] not in seen:
-                seen.add(match['ticker'])
-                unique_matches.append(match)
-        
-        # Cache and return results
-        final_results = unique_matches[:5]  # Limit to top 5 matches
-        search_cache[cache_key] = final_results
-        return jsonify(final_results)
+    try:
+        # Check if input is a ticker or company name
+        ticker = query if query.isupper() else get_ticker_from_name(query)
+        if not ticker:
+            return jsonify({'error': 'Company not found'}), 404
+
+        stock = yf.Ticker(ticker)
+        stock_info = stock.info
+
+        if not stock_info or 'longName' not in stock_info:
+            return jsonify({'error': 'Stock data unavailable'}), 404
+
+        match = {
+            'ticker': ticker,
+            'name': stock_info.get('longName', ''),
+            'exchange': stock_info.get('exchange', ''),
+            'match_quality': 'high'
+        }
+
+        search_cache[cache_key] = [match]
+        return jsonify([match])
 
     except Exception as e:
         logger.error(f"Error searching stocks: {e}")
-        return jsonify([])
-
-@app.route('/api/stock-analysis', methods=['POST'])
-def stock_analysis():
-    try:
-        data = request.get_json()
-        ticker = data.get('ticker', None)
-
-        if not ticker:
-            return jsonify({'error': 'Ticker symbol is required'}), 400
-
-        insights = fetch_insights(ticker)
-        if 'error' in insights:
-            return jsonify(insights), 500
-        return jsonify(insights)
-
-    except Exception as e:
-        logger.error(f"Error in stock analysis endpoint: {e}")
-        return jsonify({'error': str(e)}), 500
-
+        return jsonify({'error': 'Internal server error'}), 500
 def fetch_insights(ticker):
     try:
         sleep(0.2)  # Rate limiting
