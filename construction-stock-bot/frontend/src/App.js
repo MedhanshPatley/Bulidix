@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import { X } from 'lucide-react';
 import logoWhite from './logo-white.png';
+import { Analytics } from '@vercel/analytics/react';
 
 function App() {
   const [selectedStock, setSelectedStock] = useState(null);
@@ -213,6 +214,7 @@ function App() {
           )}
         </div>
       )}
+      <Analytics />
     </div>
   );
 }
