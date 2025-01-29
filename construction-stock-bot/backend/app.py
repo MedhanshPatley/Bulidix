@@ -28,6 +28,48 @@ CORS(app, resources={
 })
 
 
+# Initialize caches
+search_cache = {}
+stock_info_cache = TTLCache(maxsize=100, ttl=3600)  # Cache for 1 hour
+
+def normalize_ticker(query):
+    """Normalize the input to get the correct ticker symbol"""
+    try:
+        # First, try direct ticker lookup
+        stock = yf.Ticker(query.upper())
+        info = stock.info
+        if info and 'longName' in info:
+            return query.upper()
+
+        # If direct lookup fails, try company name search
+        search = yq.search(query)
+        if 'quotes' in search and search['quotes']:
+            best_match = None
+            highest_score = 0
+            
+            for quote in search['quotes']:
+                # Skip cryptocurrency and other non-stock assets
+                if quote.get('quoteType', '').lower() not in ['equity', 'stock']:
+                    continue
+                    
+                # Simple scoring system
+                score = 0
+                if query.lower() in quote.get('longname', '').lower():
+                    score += 3
+                if query.lower() in quote.get('symbol', '').lower():
+                    score += 2
+                    
+                if score > highest_score:
+                    highest_score = score
+                    best_match = quote
+            
+            if best_match:
+                return best_match['symbol']
+                
+    except Exception as e:
+        logger.error(f"Error in normalize_ticker for {query}: {e}")
+    return None
+
 @lru_cache(maxsize=100)
 def get_stock_info(ticker_try):
     """Fetch stock information with caching"""
@@ -42,7 +84,9 @@ def get_stock_info(ticker_try):
             result = {
                 'ticker': ticker_try.split('.')[0],
                 'name': info.get('longName', ''),
-                'exchange': info.get('exchange', '')
+                'exchange': info.get('exchange', ''),
+                'sector': info.get('sector', ''),
+                'industry': info.get('industry', '')
             }
             stock_info_cache[ticker_try] = result
             return result
@@ -51,6 +95,7 @@ def get_stock_info(ticker_try):
     return None
 
 def calculate_period_performance(data, period):
+    """Calculate performance over a given period"""
     try:
         if data.empty:
             return 'N/A'
@@ -62,6 +107,7 @@ def calculate_period_performance(data, period):
         return 'N/A'
 
 def calculate_revenue_growth(data, periods):
+    """Calculate revenue growth over given periods"""
     try:
         if data.empty or len(data.columns) < periods:
             return 'N/A'
@@ -73,6 +119,7 @@ def calculate_revenue_growth(data, periods):
         return 'N/A'
 
 def calculate_rsi(data, periods=14):
+    """Calculate Relative Strength Index"""
     try:
         if len(data) < periods:
             return None
@@ -92,20 +139,6 @@ def calculate_rsi(data, periods=14):
 def home():
     return "Welcome to the Stock Analysis API! Use the endpoint '/api/stock-analysis' to fetch insights."
 
-search_cache = {}
-
-
-def get_ticker_from_name(company_name):
-    """Fetch ticker symbol for a given company name using yahooquery."""
-    try:
-        search = yq.search(company_name)
-        if 'quotes' in search and search['quotes']:
-            return search['quotes'][0]['symbol']  # Return first result's ticker
-    except Exception as e:
-        logger.error(f"Error fetching ticker for {company_name}: {e}")
-    return None
-
-
 @app.route('/api/search-stocks', methods=['GET'])
 def search_stocks():
     """Search for stock details by ticker symbol or company name."""
@@ -118,10 +151,10 @@ def search_stocks():
         return jsonify(search_cache[cache_key])
 
     try:
-        # Check if input is a ticker or company name
-        ticker = query if query.isupper() else get_ticker_from_name(query)
+        # Get normalized ticker
+        ticker = normalize_ticker(query)
         if not ticker:
-            return jsonify({'error': 'Company not found'}), 404
+            return jsonify({'error': 'Company or ticker not found'}), 404
 
         stock = yf.Ticker(ticker)
         stock_info = stock.info
@@ -133,7 +166,9 @@ def search_stocks():
             'ticker': ticker,
             'name': stock_info.get('longName', ''),
             'exchange': stock_info.get('exchange', ''),
-            'match_quality': 'high'
+            'sector': stock_info.get('sector', ''),
+            'industry': stock_info.get('industry', ''),
+            'match_quality': 'high' if query.upper() == ticker else 'medium'
         }
 
         search_cache[cache_key] = [match]
@@ -142,7 +177,26 @@ def search_stocks():
     except Exception as e:
         logger.error(f"Error searching stocks: {e}")
         return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/stock-analysis', methods=['POST'])
+def stock_analysis():
+    """Endpoint for detailed stock analysis"""
+    try:
+        data = request.get_json()
+        ticker = data.get('ticker', None)
+
+        if not ticker:
+            return jsonify({'error': 'Ticker symbol is required'}), 400
+
+        insights = fetch_insights(ticker)
+        return jsonify(insights)
+
+    except Exception as e:
+        logger.error(f"Error in stock analysis endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
+
 def fetch_insights(ticker):
+    """Fetch comprehensive insights for a given ticker"""
     try:
         sleep(0.2)  # Rate limiting
         stock = yf.Ticker(ticker)
@@ -164,7 +218,7 @@ def fetch_insights(ticker):
                 if attempt == max_retries - 1:
                     logger.error(f"Failed to fetch historical data after {max_retries} attempts: {e}")
                     return {'error': 'Failed to fetch historical data'}
-                sleep(1)  # Wait before retry
+                sleep(1)
         
         # Get current metrics
         current_price = current_data['Close'].iloc[-1] if not current_data.empty else None
@@ -274,6 +328,7 @@ def fetch_insights(ticker):
     except Exception as e:
         logger.error(f"Error in fetch_insights for {ticker}: {e}")
         return {'error': f'Failed to fetch stock data: {str(e)}'}
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
