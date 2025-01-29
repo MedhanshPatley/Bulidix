@@ -235,6 +235,7 @@ import pandas as pd
 from time import sleep
 from functools import lru_cache
 import logging
+from cachetools import TTLCache
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -245,25 +246,44 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
-        "origins":"*",
+        "origins": "*",
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
 
-# Cache for stock info to reduce API calls
+# Cache configurations
+search_cache = TTLCache(maxsize=100, ttl=3600)  # Cache search results for 1 hour
+stock_info_cache = TTLCache(maxsize=100, ttl=3600)  # Cache stock info for 1 hour
+
+def clean_company_name(name):
+    """Clean company name by removing common suffixes and special characters"""
+    common_suffixes = [' inc', ' inc.', ' corp', ' corp.', ' ltd', ' ltd.', 
+                      ' plc', ' co', ' co.', ' company', ' holdings', 
+                      ' holding', ' group', ' technologies', ' technology']
+    name = name.lower()
+    for suffix in common_suffixes:
+        name = name.replace(suffix, '')
+    return ' '.join(name.split())  # Remove extra whitespace
+
 @lru_cache(maxsize=100)
 def get_stock_info(ticker_try):
+    """Fetch stock information with caching"""
+    if ticker_try in stock_info_cache:
+        return stock_info_cache[ticker_try]
+    
     try:
         sleep(0.2)  # Rate limiting
         stock = yf.Ticker(ticker_try)
         info = stock.info
         if info and 'longName' in info:
-            return {
+            result = {
                 'ticker': ticker_try.split('.')[0],
                 'name': info.get('longName', ''),
                 'exchange': info.get('exchange', '')
             }
+            stock_info_cache[ticker_try] = result
+            return result
     except Exception as e:
         logger.error(f"Error fetching info for {ticker_try}: {e}")
     return None
@@ -316,38 +336,75 @@ def search_stocks():
     if not query:
         return jsonify([])
     
+    # Check cache first
+    cache_key = query.lower()
+    if cache_key in search_cache:
+        return jsonify(search_cache[cache_key])
+    
     try:
-        # Try direct ticker search first
-        stock = yf.Ticker(query.upper())
-        if stock.info and 'longName' in stock.info:
-            return jsonify([{
-                'ticker': query.upper(),
-                'name': stock.info['longName'],
-                'exchange': stock.info.get('exchange', '')
-            }])
-        
-        # If direct ticker search fails, search by company name
         matches = []
-        search = yf.Ticker(query)
-        suggestions = search.recommendations
+        cleaned_query = clean_company_name(query)
         
-        if suggestions is not None:
-            for suggestion in suggestions:
-                try:
-                    stock_info = yf.Ticker(suggestion)
-                    if stock_info.info and 'longName' in stock_info.info:
-                        matches.append({
-                            'ticker': suggestion,
-                            'name': stock_info.info['longName'],
-                            'exchange': stock_info.info.get('exchange', '')
-                        })
-                except:
-                    continue
-                    
-        return jsonify(matches)
+        # Try yfinance search first (this uses Yahoo Finance's search API)
+        try:
+            # Use yfinance's search functionality
+            stock = yf.Ticker(query)
+            if hasattr(stock, 'info') and stock.info:
+                # Get list of similar tickers from Yahoo Finance
+                similar = stock.info.get('similarStocks', [])
+                # Add the main stock first
+                if 'symbol' in stock.info:
+                    matches.append({
+                        'ticker': stock.info['symbol'],
+                        'name': stock.info.get('longName', ''),
+                        'exchange': stock.info.get('exchange', ''),
+                        'match_quality': 'high'
+                    })
+                
+                # Add similar stocks
+                for similar_ticker in similar[:4]:  # Limit to 4 similar stocks
+                    try:
+                        similar_stock = yf.Ticker(similar_ticker)
+                        if similar_stock.info and 'longName' in similar_stock.info:
+                            matches.append({
+                                'ticker': similar_ticker,
+                                'name': similar_stock.info['longName'],
+                                'exchange': similar_stock.info.get('exchange', ''),
+                                'match_quality': 'related'
+                            })
+                    except:
+                        continue
+        except Exception as e:
+            logger.debug(f"Primary search failed: {e}")
             
+            # Fallback: Try direct symbol search
+            try:
+                fallback_stock = yf.Ticker(query.upper())
+                if fallback_stock.info and 'longName' in fallback_stock.info:
+                    matches.append({
+                        'ticker': query.upper(),
+                        'name': fallback_stock.info['longName'],
+                        'exchange': fallback_stock.info.get('exchange', ''),
+                        'match_quality': 'direct'
+                    })
+            except:
+                pass
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_matches = []
+        for match in matches:
+            if match['ticker'] not in seen:
+                seen.add(match['ticker'])
+                unique_matches.append(match)
+        
+        # Cache and return results
+        final_results = unique_matches[:5]  # Limit to top 5 matches
+        search_cache[cache_key] = final_results
+        return jsonify(final_results)
+
     except Exception as e:
-        print(f"Error searching stocks: {e}")
+        logger.error(f"Error searching stocks: {e}")
         return jsonify([])
 
 @app.route('/api/stock-analysis', methods=['POST'])
@@ -451,36 +508,36 @@ def fetch_insights(ticker):
             - 52-Week Range: {insights['52 Week Low']} - {insights['52 Week High']}
             
             Analyze the stock's historical performance, current position, potential risks, and investment outlook.
-Use the following structure:
+            Use the following structure:
 
-Stock Analysis for {ticker}
+            Stock Analysis for {ticker}
 
-Market Position:
-Analyze the company's position within its sector and industry.
+            Market Position:
+            Analyze the company's position within its sector and industry.
 
-Historical Performance Analysis:
-Analyze 1, 3, and 5-year performance trends and what they indicate about the company's growth trajectory.
+            Historical Performance Analysis:
+            Analyze 1, 3, and 5-year performance trends and what they indicate about the company's growth trajectory.
 
-Revenue Growth Analysis:
-Compare revenue growth across different time periods and what this suggests about the company's business model and market success.
+            Revenue Growth Analysis:
+            Compare revenue growth across different time periods and what this suggests about the company's business model and market success.
 
-Current Financial Analysis:
-Evaluate current financial metrics and their implications for the company's health and valuation.
+            Current Financial Analysis:
+            Evaluate current financial metrics and their implications for the company's health and valuation.
 
-Technical Analysis:
-Interpret current technical indicators and their implications for short-term trading.
+            Technical Analysis:
+            Interpret current technical indicators and their implications for short-term trading.
 
-Risk Assessment:
-Identify key risks based on historical performance and current market conditions.
+            Risk Assessment:
+            Identify key risks based on historical performance and current market conditions.
 
-Investment Outlook:
-Provide both short-term and long-term outlook based on historical trends and current metrics.
+            Investment Outlook:
+            Provide both short-term and long-term outlook based on historical trends and current metrics.
 
-Recommendation:
-Offer a clear investment recommendation supported by the analysis.
+            Recommendation:
+            Offer a clear investment recommendation supported by the analysis.
 
-Keep the analysis concise but comprehensive, focusing on key insights from the historical data.
-"""
+            Keep the analysis concise but comprehensive, focusing on key insights from the historical data.
+            """
 
             response = model.generate_content(prompt)
             analysis = response.text
