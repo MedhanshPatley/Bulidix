@@ -28,9 +28,27 @@ CORS(app, resources={
 })
 
 
-# Initialize caches
 search_cache = {}
 stock_info_cache = TTLCache(maxsize=100, ttl=3600)  # Cache for 1 hour
+
+def get_currency_from_symbol(ticker):
+    """Determine currency based on stock symbol suffix"""
+    if ticker.endswith(('.NS', '.BO')):  # Indian exchanges
+        return 'INR', '₹'
+    return 'USD', '$'  # Default to USD for other exchanges
+
+def format_currency_value(value, currency_symbol, is_percentage=False):
+    """Format values with appropriate currency symbol"""
+    if value == 'N/A':
+        return 'N/A'
+    if is_percentage:
+        return f"{value}"
+    try:
+        if isinstance(value, str):
+            value = float(value.replace(',', ''))
+        return f"{currency_symbol}{value:,.2f}" if isinstance(value, (int, float)) else f"{currency_symbol}{value}"
+    except (ValueError, TypeError):
+        return 'N/A'
 
 def normalize_ticker(query):
     """Normalize the input to get the correct ticker symbol"""
@@ -81,12 +99,14 @@ def get_stock_info(ticker_try):
         stock = yf.Ticker(ticker_try)
         info = stock.info
         if info and 'longName' in info:
+            currency, _ = get_currency_from_symbol(ticker_try)
             result = {
                 'ticker': ticker_try.split('.')[0],
                 'name': info.get('longName', ''),
                 'exchange': info.get('exchange', ''),
                 'sector': info.get('sector', ''),
-                'industry': info.get('industry', '')
+                'industry': info.get('industry', ''),
+                'currency': currency
             }
             stock_info_cache[ticker_try] = result
             return result
@@ -162,12 +182,14 @@ def search_stocks():
         if not stock_info or 'longName' not in stock_info:
             return jsonify({'error': 'Stock data unavailable'}), 404
 
+        currency, _ = get_currency_from_symbol(ticker)
         match = {
             'ticker': ticker,
             'name': stock_info.get('longName', ''),
             'exchange': stock_info.get('exchange', ''),
             'sector': stock_info.get('sector', ''),
             'industry': stock_info.get('industry', ''),
+            'currency': currency,
             'match_quality': 'high' if query.upper() == ticker else 'medium'
         }
 
@@ -205,6 +227,9 @@ def fetch_insights(ticker):
         if not stock or not stock.info:
             return {'error': 'Unable to fetch stock data'}
         
+        # Get currency information based on ticker
+        currency, currency_symbol = get_currency_from_symbol(ticker)
+        
         # Fetch historical data with retry mechanism
         max_retries = 3
         for attempt in range(max_retries):
@@ -224,9 +249,9 @@ def fetch_insights(ticker):
         current_price = current_data['Close'].iloc[-1] if not current_data.empty else None
         info = stock.info
 
-        # Calculate metrics
+        # Calculate metrics with proper currency formatting
         insights = {
-            'Current Price': f"${current_price:.2f}" if current_price else 'N/A',
+            'Current Price': format_currency_value(current_price, currency_symbol) if current_price else 'N/A',
             'Performance 1 Year': calculate_period_performance(data_1y, '1y'),
             'Performance 3 Year': calculate_period_performance(data_3y, '3y'),
             'Performance 5 Year': calculate_period_performance(data_5y, '5y'),
@@ -234,12 +259,13 @@ def fetch_insights(ticker):
             'Revenue Growth 3 Year': calculate_revenue_growth(stock.income_stmt, 4),
             'RSI': f"{calculate_rsi(current_data):.2f}" if calculate_rsi(current_data) is not None else 'N/A',
             'P/E Ratio': info.get('trailingPE', 'N/A'),
-            'Market Cap': f"${info.get('marketCap', 'N/A'):,}" if info.get('marketCap') != 'N/A' else 'N/A',
+            'Market Cap': format_currency_value(info.get('marketCap'), currency_symbol) if info.get('marketCap') != 'N/A' else 'N/A',
             'Dividend Yield': f"{info.get('dividendYield', 0) * 100:.2f}%",
-            '52 Week High': f"${info.get('fiftyTwoWeekHigh', 'N/A')}",
-            '52 Week Low': f"${info.get('fiftyTwoWeekLow', 'N/A')}",
+            '52 Week High': format_currency_value(info.get('fiftyTwoWeekHigh'), currency_symbol),
+            '52 Week Low': format_currency_value(info.get('fiftyTwoWeekLow'), currency_symbol),
             'Sector': info.get('sector', 'N/A'),
-            'Industry': info.get('industry', 'N/A')
+            'Industry': info.get('industry', 'N/A'),
+            'Currency': currency
         }
 
         # Generate AI analysis
@@ -269,7 +295,7 @@ def fetch_insights(ticker):
             3 Year: {insights['Revenue Growth 3 Year']}
             
             Current Financial Metrics:
-            - Price: {insights['Current Price']}
+            - Price: {insights['Current Price']} ({currency})
             - P/E Ratio: {insights['P/E Ratio']}
             - Dividend Yield: {insights['Dividend Yield']}
             - Market Cap: {insights['Market Cap']}
@@ -328,7 +354,6 @@ def fetch_insights(ticker):
     except Exception as e:
         logger.error(f"Error in fetch_insights for {ticker}: {e}")
         return {'error': f'Failed to fetch stock data: {str(e)}'}
-
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
