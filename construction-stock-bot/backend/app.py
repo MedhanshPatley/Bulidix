@@ -317,22 +317,38 @@ def search_stocks():
         return jsonify([])
     
     try:
-        matches = []
-        possible_tickers = [
-            query.upper(),
-            f"{query.upper()}.X",
-            f"{query.upper()}-USD"
-        ]
+        # Try direct ticker search first
+        stock = yf.Ticker(query.upper())
+        if stock.info and 'longName' in stock.info:
+            return jsonify([{
+                'ticker': query.upper(),
+                'name': stock.info['longName'],
+                'exchange': stock.info.get('exchange', '')
+            }])
         
-        for ticker_try in possible_tickers:
-            result = get_stock_info(ticker_try)
-            if result:
-                matches.append(result)
-                
+        # If direct ticker search fails, search by company name
+        matches = []
+        search = yf.Ticker(query)
+        suggestions = search.recommendations
+        
+        if suggestions is not None:
+            for suggestion in suggestions:
+                try:
+                    stock_info = yf.Ticker(suggestion)
+                    if stock_info.info and 'longName' in stock_info.info:
+                        matches.append({
+                            'ticker': suggestion,
+                            'name': stock_info.info['longName'],
+                            'exchange': stock_info.info.get('exchange', '')
+                        })
+                except:
+                    continue
+                    
         return jsonify(matches)
+            
     except Exception as e:
-        logger.error(f"Error searching stocks: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"Error searching stocks: {e}")
+        return jsonify([])
 
 @app.route('/api/stock-analysis', methods=['POST'])
 def stock_analysis():
